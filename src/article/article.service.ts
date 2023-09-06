@@ -3,7 +3,7 @@ import { UserEntity } from '@app/user/user.entity';
 import { CreateArticleDto } from '@app/article/dto/createArticle.dto';
 import { ArticleEntity } from '@app/article/article.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DeleteResult, Repository } from 'typeorm';
 import { ArticleResponseInterface } from '@app/article/types/articleResponse.interface';
 import slugify from 'slugify';
 
@@ -32,19 +32,56 @@ export class ArticleService {
   }
 
   async getArticle(slug: string): Promise<ArticleEntity> {
-    const arrticle = await this.articleRepository.findOne({
-      where: {
-        slug,
-      },
-    });
+    const article = await this.findBySlug(slug);
 
-    if (!arrticle) {
+    if (!article) {
       throw new HttpException('Article is not found', HttpStatus.NOT_FOUND);
     }
 
-    return arrticle;
+    return article;
   }
 
+  async updateArticle(
+    currentUserId: number,
+    slug: string,
+    createArticleDto: CreateArticleDto,
+  ): Promise<ArticleEntity> {
+    const article = await this.articleRepository.findOne({ where: { slug } });
+    if (!article) {
+      throw new HttpException(
+        'Article is does not exist',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    if (currentUserId !== article.author.id) {
+      throw new HttpException('You are is not author', HttpStatus.FORBIDDEN);
+    }
+
+    Object.assign(article, createArticleDto);
+
+    return await this.articleRepository.save(article);
+  }
+
+  async deleteArticle(
+    slug: string,
+    currentUserId: number,
+  ): Promise<DeleteResult> {
+    const article = await this.findBySlug(slug);
+    if (!article) {
+      throw new HttpException('Article does not exist', HttpStatus.NOT_FOUND);
+    }
+
+    if (article.author.id !== currentUserId) {
+      throw new HttpException('You are not an author', HttpStatus.FORBIDDEN);
+    }
+
+    return await this.articleRepository.delete({ slug });
+  }
+
+  async findBySlug(slug: string) {
+    return await this.articleRepository.findOne({ where: { slug } });
+  }
   buildArticleResponse(article: ArticleEntity): ArticleResponseInterface {
     return { article };
   }
